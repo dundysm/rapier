@@ -56,7 +56,7 @@ pub(super) const OUTCOME_RECYCLED_REQUALIFIED: u8 = 3;
 // change: counted as a full update, but not reconciled.
 pub(super) const OUTCOME_FULL_CLEAN: u8 = 4;
 // Full update of a composite pair (persistent workspace: heightfield/trimesh/
-// voxels/compound). Manifold ordinals are NOT stable across such updates (BVH-order
+// voxels/compound; or any voxels pair, since ball-vs-voxels keeps no workspace). Manifold ordinals are NOT stable across such updates (BVH-order
 // rebuild, dropped subshapes lose `graph_pos`), so force a full solver-graph rebuild.
 pub(super) const OUTCOME_FULL_COMPOSITE: u8 = 5;
 // Pair cleared by a filter early-out while it still had manifolds in the solver
@@ -795,7 +795,14 @@ pub(super) fn process_pair(
     // Composite pairs have unstable manifold ordinals (see `OUTCOME_FULL_COMPOSITE`),
     // so signal a full rebuild. Must be checked before the `FULL_CLEAN` shortcut: a
     // surviving manifold can look "clean" while a dropped sibling leaked its graph slot.
-    if outcome == OUTCOME_FULL && pair.rigid().is_some_and(|r| r.workspace.is_some()) {
+    // Ball-vs-voxels manifolds are rebuilt without a workspace, so the shape is checked too.
+    if outcome == OUTCOME_FULL
+        && pair.rigid().is_some_and(|r| {
+            r.workspace.is_some()
+                || co1.shape.as_voxels().is_some()
+                || co2.shape.as_voxels().is_some()
+        })
+    {
         return OUTCOME_FULL_COMPOSITE;
     }
     if outcome == OUTCOME_FULL && !membership_changed {
